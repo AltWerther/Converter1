@@ -1,0 +1,5 @@
+{
+  "name": "Binary-Decimal Converter",
+  "description": "A versatile converter for binary and decimal numbers, supporting various data types including integers and IEEE 754 floating-point numbers. Designed for both desktop and mobile use.",
+  "requestFramePermissions": []
+}
