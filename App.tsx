@@ -145,7 +145,7 @@ const App: React.FC = () => {
     let hasError = false;
 
     if (binaryInputMode === 'hex') {
-        const hexValue = rawValue.replace(/\s/g, '').replace(/^0x/i, '');
+        const hexValue = rawValue.replace(/\s/g, '');
         const binaryResult = convertHexToBinary(hexValue);
         if (typeof binaryResult === 'string') {
             currentBinary = binaryResult;
@@ -155,9 +155,6 @@ const App: React.FC = () => {
         }
     } else { // binary mode
         let binaryString = rawValue.replace(/\s/g, '');
-        if (binaryString.toLowerCase().startsWith('0b')) {
-            binaryString = binaryString.substring(2);
-        }
         if (!/^[01]*$/.test(binaryString)) {
             setError('Invalid binary input');
             hasError = true;
@@ -285,7 +282,7 @@ const App: React.FC = () => {
                 label=""
                 value={binaryHexDisplayValue}
                 onChange={handleBinaryHexChange}
-                placeholder={binaryInputMode === 'hex' ? `e.g., 0x${convertBinaryToHex(DATA_TYPE_DETAILS[dataType].example.replace(/\s/g,'').substring(0,8))}...` : `e.g., 0b${DATA_TYPE_DETAILS[dataType].example}`}
+                placeholder={binaryInputMode === 'hex' ? `e.g., ${convertBinaryToHex(DATA_TYPE_DETAILS[dataType].example.replace(/\s/g,'').substring(0,8))}...` : `e.g., ${DATA_TYPE_DETAILS[dataType].example}`}
                 type="text"
                 error={lastChanged === 'binary' ? error : null}
                 isBinary={true}

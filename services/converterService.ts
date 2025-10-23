@@ -52,7 +52,7 @@ export function convertBinaryToHex(binary: string): string {
 }
 
 export function convertHexToBinary(hex: string): ConversionResult {
-    const sanitizedHex = hex.replace(/\s/g, '').replace(/^0x/i, '');
+    const sanitizedHex = hex.replace(/\s/g, '');
     if (!/^[0-9a-fA-F]*$/.test(sanitizedHex)) {
         return { error: 'Invalid hexadecimal string.' };
     }
