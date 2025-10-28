@@ -198,18 +198,7 @@ const App: React.FC = () => {
 
   const handleModeChange = (mode: 'binary' | 'hex') => {
     if (mode !== binaryInputMode) {
-        const currentBinary = binaryValue;
         setBinaryInputMode(mode);
-        // re-evaluate decimal from binary when switching, if binary exists
-        if(currentBinary) {
-            const result = convertBinaryToDecimal(currentBinary, dataType);
-            if (typeof result === 'number') {
-                const decimalString = isFloatType
-                    ? formatDecimalForDisplay(result, precision)
-                    : String(result);
-                setDecimalValue(decimalString);
-            }
-        }
     }
   };
 
