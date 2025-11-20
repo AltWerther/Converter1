@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { DataType, DATA_TYPE_DETAILS } from './types';
 import { 
@@ -8,6 +9,7 @@ import {
   convertBinaryToHex,
   formatHexString
 } from './services/converterService';
+import { pythonScriptTemplate } from './services/pythonTemplate';
 import DataTypeSelector from './components/DataTypeSelector';
 import ConverterInput from './components/ConverterInput';
 import PrecisionSlider from './components/PrecisionSlider';
@@ -202,6 +204,18 @@ const App: React.FC = () => {
     }
   };
 
+  const handleExportPython = () => {
+    const blob = new Blob([pythonScriptTemplate], { type: 'text/x-python' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'binary_converter.py';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const binaryHexDisplayValue = useMemo(() => {
     if (!binaryValue) return '';
     if (binaryInputMode === 'hex') {
@@ -279,13 +293,21 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex justify-center pt-4">
+        <div className="flex justify-center gap-4 pt-4">
           <button
             onClick={clearInputs}
             className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-8 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-brand-light-dark focus:ring-red-500"
             aria-label="Clear inputs"
           >
             Clear
+          </button>
+          <button
+            onClick={handleExportPython}
+            disabled={true}
+            className="bg-brand-blue hover:opacity-90 text-white font-bold py-2 px-8 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-brand-light-dark focus:ring-brand-blue disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Export as Python App"
+          >
+            Export Py
           </button>
         </div>
 
