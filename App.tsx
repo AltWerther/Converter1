@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { DataType, DATA_TYPE_DETAILS } from './types';
 import { 
   convertDecimalToBinary, 
@@ -14,15 +14,31 @@ import ConverterInput from './components/ConverterInput';
 import PrecisionSlider from './components/PrecisionSlider';
 
 /**
- * Formats a floating-point number for display, avoiding scientific notation and
- * rounding to a specified number of decimal places using fixed-point notation.
+ * Formats a floating-point number for display using fixed-point notation
+ * to strictly match the specified precision.
+ * 
+ * Includes a fallback: If fixed-point notation results in "0" (or "-0") for a non-zero number
+ * (due to the number being smaller than the precision allows), it automatically switches 
+ * to scientific notation to prevent data loss in the display.
+ * 
  * @param num The number to format.
  * @param precision The number of decimal places to keep.
  * @returns The formatted string.
  */
 const formatDecimalForDisplay = (num: number, precision: number): string => {
-    if (!isFinite(num)) return String(num);
-    return num.toFixed(precision);
+    if (!Number.isFinite(num)) return String(num);
+    
+    const fixed = num.toFixed(precision);
+
+    // If fixed point returns zero (e.g. 1e-200 with precision 15 -> "0.000..."),
+    // we fallback to scientific notation so the user can actually see the value 
+    // instead of thinking it is zero.
+    // We check num !== 0 to ensure we don't alter a true zero.
+    if (num !== 0 && parseFloat(fixed) === 0) {
+        return num.toExponential(precision);
+    }
+
+    return fixed;
 };
 
 const App: React.FC = () => {
@@ -33,35 +49,47 @@ const App: React.FC = () => {
   const [lastChanged, setLastChanged] = useState<'decimal' | 'binary' | 'hex' | null>(null);
   const [precision, setPrecision] = useState<number>(7);
 
+  // Ref to track the previous precision value to detect changes
+  const prevPrecisionRef = useRef(precision);
+
   const isFloatType = useMemo(() => DATA_TYPE_DETAILS[dataType].isFloat, [dataType]);
 
+  // Reset precision defaults when switching between float types
   useEffect(() => {
     if (isFloatType) {
         setPrecision(dataType === DataType.Float32 ? 7 : 15);
     }
   }, [dataType, isFloatType]);
 
-  // Sync Decimal Display when Binary changes (unless user is typing in decimal)
+  // Merged Effect: Sync Decimal Display
+  // This handles updates when binary/hex inputs change OR when precision changes.
   useEffect(() => {
-    if (lastChanged !== 'decimal' && binaryValue && isFloatType) {
-        const result = convertBinaryToDecimal(binaryValue, dataType);
-        if (typeof result === 'number') {
-            const decimalString = formatDecimalForDisplay(result, precision);
-            setDecimalValue(decimalString);
-        }
-    }
-  }, [binaryValue, dataType, isFloatType, lastChanged]); // precision is intentionally excluded to prevent overwrite on slider change via this effect
+    const precisionChanged = prevPrecisionRef.current !== precision;
+    prevPrecisionRef.current = precision;
 
-  // Update Decimal Display when Precision changes, regardless of source
-  useEffect(() => {
-    if (isFloatType && binaryValue) {
+    const formattingChanged = precisionChanged;
+
+    // If the user is typing in the decimal field, we should generally NOT overwrite their input
+    // to avoid fighting the cursor or auto-formatting prematurely.
+    // HOWEVER, if the formatting settings were explicitly changed,
+    // we MUST re-format the display to reflect the new setting immediately.
+    if (lastChanged === 'decimal' && !formattingChanged) {
+        return;
+    }
+
+    if (binaryValue) {
         const result = convertBinaryToDecimal(binaryValue, dataType);
         if (typeof result === 'number') {
-            const decimalString = formatDecimalForDisplay(result, precision);
+            const decimalString = isFloatType 
+                ? formatDecimalForDisplay(result, precision) 
+                : String(result);
             setDecimalValue(decimalString);
         }
+    } else if (lastChanged && !binaryValue) {
+        // Only clear decimal if binary was cleared by user input (not init)
+        setDecimalValue('');
     }
-  }, [precision]); // Only triggers on precision change
+  }, [binaryValue, dataType, isFloatType, lastChanged, precision]);
 
   const handleDecimalChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -113,10 +141,10 @@ const App: React.FC = () => {
     setBinaryValue(binaryString);
     const result = convertBinaryToDecimal(binaryString, dataType);
     if (typeof result === 'number') {
+        // Update decimal immediately for responsiveness
         const decimalString = isFloatType 
             ? formatDecimalForDisplay(result, precision) 
             : String(result);
-        
         setDecimalValue(decimalString);
         setError(null);
     } else {
@@ -187,7 +215,7 @@ const App: React.FC = () => {
             <DataTypeSelector selectedType={dataType} onChange={handleDataTypeChange} />
           </div>
           {isFloatType && (
-            <div className="pt-2">
+            <div className="pt-2 space-y-4">
                 <PrecisionSlider 
                     precision={precision} 
                     onChange={setPrecision}
