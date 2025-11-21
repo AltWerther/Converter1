@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useRef, useEffect } from 'react';
 
 // ClipboardIcon component defined within the same file as it's only used here.
 const ClipboardIcon: React.FC<{className?: string}> = ({ className }) => (
@@ -23,10 +24,12 @@ interface ConverterInputProps {
   type: 'text' | 'number';
   error: string | null;
   isBinary?: boolean;
+  rows?: number;
 }
 
-const ConverterInput: React.FC<ConverterInputProps> = ({ id, label, value, onChange, placeholder, type, error, isBinary = false }) => {
+const ConverterInput: React.FC<ConverterInputProps> = ({ id, label, value, onChange, placeholder, type, error, isBinary = false, rows }) => {
   const [copied, setCopied] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(value.replace(/\s/g, ''));
@@ -34,17 +37,31 @@ const ConverterInput: React.FC<ConverterInputProps> = ({ id, label, value, onCha
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Auto-resize logic
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      // Reset height to auto to correctly calculate the new scrollHeight (allows shrinking)
+      textarea.style.height = 'auto';
+      // Set height to scrollHeight to fit content
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [value]);
+
+  const effectiveRows = rows !== undefined ? rows : (isBinary ? 4 : 1);
+
   return (
     <div className="space-y-2">
       {label && <label htmlFor={id} className="text-lg font-semibold text-gray-300">{label}</label>}
       <div className="relative">
         <textarea
+          ref={textareaRef}
           id={id}
           value={value}
           onChange={onChange as any}
           placeholder={placeholder}
-          className={`w-full bg-brand-dark border ${error ? 'border-red-500' : 'border-brand-gray'} rounded-md p-3 text-gray-200 focus:ring-2 focus:ring-brand-blue focus:border-brand-blue transition-colors duration-200 resize-none ${isBinary ? 'font-mono text-lg break-all' : 'text-xl'}`}
-          rows={isBinary ? 4 : 1}
+          className={`w-full bg-brand-dark border ${error ? 'border-red-500' : 'border-brand-gray'} rounded-md p-3 pr-12 text-gray-200 focus:ring-2 focus:ring-brand-blue focus:border-brand-blue transition-colors duration-200 resize-none overflow-hidden ${isBinary ? 'font-mono text-lg break-all' : 'text-xl'}`}
+          rows={effectiveRows}
         />
         <button
           onClick={handleCopy}

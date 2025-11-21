@@ -42,10 +42,14 @@ export function formatHexString(hex: string): string {
 export function convertBinaryToHex(binary: string): string {
     if (!binary || !/^[01]+$/.test(binary)) return '';
     
-    // Binary string from the app is already padded to the correct bit length
+    // Pad left to ensure length is multiple of 4 so grouping is correct for the integer value
+    const remainder = binary.length % 4;
+    const padding = remainder === 0 ? 0 : 4 - remainder;
+    const padded = binary.padStart(binary.length + padding, '0');
+    
     let hex = '';
-    for (let i = 0; i < binary.length; i += 4) {
-        const chunk = binary.substring(i, i + 4);
+    for (let i = 0; i < padded.length; i += 4) {
+        const chunk = padded.substring(i, i + 4);
         hex += parseInt(chunk, 2).toString(16).toUpperCase();
     }
     return hex;
@@ -115,13 +119,18 @@ export function convertBinaryToDecimal(binary: string, dataType: DataType): Numb
         return { error: 'Invalid binary string.' };
     }
 
-    if (binary.length !== details.bits) {
-        return { error: `Expected ${details.bits} bits for ${dataType}.` };
+    if (binary.length > details.bits) {
+        return { error: `Binary string exceeds ${details.bits} bits for ${dataType}.` };
     }
 
+    // Pad with leading zeros to ensure correct bit length for processing.
+    // This right-aligns the bits, treating the input as the integer value of the bit pattern.
+    const paddedBinary = binary.padStart(details.bits, '0');
+
     if (!details.isFloat) {
-        const value = parseInt(binary, 2);
-        if (details.signed && binary[0] === '1') {
+        const value = parseInt(paddedBinary, 2);
+        // Check sign bit on the full width binary
+        if (details.signed && paddedBinary[0] === '1') {
             return value - Math.pow(2, details.bits);
         }
         return value;
@@ -131,8 +140,11 @@ export function convertBinaryToDecimal(binary: string, dataType: DataType): Numb
     const buffer = new ArrayBuffer(details.bits / 8);
     const view = new DataView(buffer);
     
+    // We construct the buffer byte by byte from the binary string.
+    // Since the DataView reads as Big Endian (Network Byte Order), 
+    // we map the first 8 bits of our string to the first byte (index 0), and so on.
     for (let i = 0; i < details.bits / 8; i++) {
-        const byte = binary.substring(i * 8, (i + 1) * 8);
+        const byte = paddedBinary.substring(i * 8, (i + 1) * 8);
         view.setUint8(i, parseInt(byte, 2));
     }
     

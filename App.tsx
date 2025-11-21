@@ -9,81 +9,28 @@ import {
   convertBinaryToHex,
   formatHexString
 } from './services/converterService';
-import { pythonScriptTemplate } from './services/pythonTemplate';
 import DataTypeSelector from './components/DataTypeSelector';
 import ConverterInput from './components/ConverterInput';
 import PrecisionSlider from './components/PrecisionSlider';
 
 /**
- * Converts a number into a string representation without using scientific notation.
- * @param num The number to convert.
- * @returns A string representing the number in standard decimal notation.
- */
-const toNonScientific = (num: number): string => {
-    const numStr = String(num);
-    if (!numStr.includes('e')) {
-        return numStr;
-    }
-
-    const match = numStr.match(/^(-?)(\d)\.?(\d*)e([+-]\d+)$/);
-    if (!match) {
-        return numStr;
-    }
-
-    const sign = match[1];
-    const intPart = match[2];
-    const fracPart = match[3] || '';
-    let exp = parseInt(match[4], 10);
-    
-    let wholeNumStr = intPart + fracPart;
-
-    if (exp > 0) { // Positive exponent
-        if (exp >= fracPart.length) {
-            wholeNumStr = wholeNumStr.padEnd(wholeNumStr.length + exp - fracPart.length, '0');
-        } else {
-            wholeNumStr = wholeNumStr.slice(0, exp + 1) + '.' + wholeNumStr.slice(exp + 1);
-        }
-    } else { // Negative exponent
-        exp = -exp;
-        wholeNumStr = '0.' + '0'.repeat(exp - 1) + wholeNumStr;
-    }
-
-    return sign + wholeNumStr;
-};
-
-/**
  * Formats a floating-point number for display, avoiding scientific notation and
- * truncating to a specified number of decimal places.
+ * rounding to a specified number of decimal places using fixed-point notation.
  * @param num The number to format.
  * @param precision The number of decimal places to keep.
  * @returns The formatted string.
  */
 const formatDecimalForDisplay = (num: number, precision: number): string => {
     if (!isFinite(num)) return String(num);
-    if (num === 0) return (0).toFixed(precision);
-
-    const fullDecimalString = toNonScientific(num);
-    
-    const [integerPart, decimalPart = ''] = fullDecimalString.split('.');
-    
-    if (precision === 0) {
-        return integerPart;
-    }
-    
-    const truncatedDecimalPart = decimalPart.substring(0, precision);
-    const paddedDecimalPart = truncatedDecimalPart.padEnd(precision, '0');
-    
-    return `${integerPart}.${paddedDecimalPart}`;
+    return num.toFixed(precision);
 };
-
 
 const App: React.FC = () => {
   const [dataType, setDataType] = useState<DataType>(DataType.Float32);
   const [decimalValue, setDecimalValue] = useState<string>('');
   const [binaryValue, setBinaryValue] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
-  const [lastChanged, setLastChanged] = useState<'decimal' | 'binary' | null>(null);
-  const [binaryInputMode, setBinaryInputMode] = useState<'binary' | 'hex'>('binary');
+  const [lastChanged, setLastChanged] = useState<'decimal' | 'binary' | 'hex' | null>(null);
   const [precision, setPrecision] = useState<number>(7);
 
   const isFloatType = useMemo(() => DATA_TYPE_DETAILS[dataType].isFloat, [dataType]);
@@ -94,6 +41,7 @@ const App: React.FC = () => {
     }
   }, [dataType, isFloatType]);
 
+  // Sync Decimal Display when Binary changes (unless user is typing in decimal)
   useEffect(() => {
     if (lastChanged !== 'decimal' && binaryValue && isFloatType) {
         const result = convertBinaryToDecimal(binaryValue, dataType);
@@ -102,7 +50,18 @@ const App: React.FC = () => {
             setDecimalValue(decimalString);
         }
     }
-  }, [precision, isFloatType, binaryValue, dataType, lastChanged]);
+  }, [binaryValue, dataType, isFloatType, lastChanged]); // precision is intentionally excluded to prevent overwrite on slider change via this effect
+
+  // Update Decimal Display when Precision changes, regardless of source
+  useEffect(() => {
+    if (isFloatType && binaryValue) {
+        const result = convertBinaryToDecimal(binaryValue, dataType);
+        if (typeof result === 'number') {
+            const decimalString = formatDecimalForDisplay(result, precision);
+            setDecimalValue(decimalString);
+        }
+    }
+  }, [precision]); // Only triggers on precision change
 
   const handleDecimalChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -132,7 +91,7 @@ const App: React.FC = () => {
     }
   }, [dataType]);
   
-  const handleBinaryHexChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBinaryChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const rawValue = e.target.value;
     setLastChanged('binary');
 
@@ -143,36 +102,16 @@ const App: React.FC = () => {
         return;
     }
 
-    let currentBinary = '';
-    let hasError = false;
-
-    if (binaryInputMode === 'hex') {
-        const hexValue = rawValue.replace(/\s/g, '');
-        const binaryResult = convertHexToBinary(hexValue);
-        if (typeof binaryResult === 'string') {
-            currentBinary = binaryResult;
-        } else {
-            setError(binaryResult.error);
-            hasError = true;
-        }
-    } else { // binary mode
-        let binaryString = rawValue.replace(/\s/g, '');
-        if (!/^[01]*$/.test(binaryString)) {
-            setError('Invalid binary input');
-            hasError = true;
-        } else {
-            currentBinary = binaryString;
-        }
-    }
-
-    if (hasError) {
+    const binaryString = rawValue.replace(/\s/g, '');
+    if (!/^[01]*$/.test(binaryString)) {
         setBinaryValue('');
         setDecimalValue('');
+        setError('Invalid binary input');
         return;
     }
-
-    setBinaryValue(currentBinary);
-    const result = convertBinaryToDecimal(currentBinary, dataType);
+    
+    setBinaryValue(binaryString);
+    const result = convertBinaryToDecimal(binaryString, dataType);
     if (typeof result === 'number') {
         const decimalString = isFloatType 
             ? formatDecimalForDisplay(result, precision) 
@@ -184,7 +123,41 @@ const App: React.FC = () => {
         setDecimalValue('');
         setError(result.error);
     }
-  }, [dataType, binaryInputMode, isFloatType, precision]);
+  }, [dataType, isFloatType, precision]);
+
+  const handleHexChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = e.target.value;
+    setLastChanged('hex');
+
+    if (rawValue === '') {
+        setBinaryValue('');
+        setDecimalValue('');
+        setError(null);
+        return;
+    }
+
+    const hexValue = rawValue.replace(/\s/g, '');
+    const binaryResult = convertHexToBinary(hexValue);
+    
+    if (typeof binaryResult === 'string') {
+        setBinaryValue(binaryResult);
+        const decimalResult = convertBinaryToDecimal(binaryResult, dataType);
+        if (typeof decimalResult === 'number') {
+             const decimalString = isFloatType 
+                ? formatDecimalForDisplay(decimalResult, precision) 
+                : String(decimalResult);
+            setDecimalValue(decimalString);
+            setError(null);
+        } else {
+            setDecimalValue('');
+            setError(decimalResult.error);
+        }
+    } else {
+        setBinaryValue('');
+        setDecimalValue('');
+        setError(binaryResult.error);
+    }
+  }, [dataType, isFloatType, precision]);
 
   const clearInputs = () => {
     setDecimalValue('');
@@ -198,35 +171,12 @@ const App: React.FC = () => {
     clearInputs();
   }, []);
 
-  const handleModeChange = (mode: 'binary' | 'hex') => {
-    if (mode !== binaryInputMode) {
-        setBinaryInputMode(mode);
-    }
-  };
-
-  const handleExportPython = () => {
-    const blob = new Blob([pythonScriptTemplate], { type: 'text/x-python' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'binary_converter.py';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const binaryHexDisplayValue = useMemo(() => {
-    if (!binaryValue) return '';
-    if (binaryInputMode === 'hex') {
-        return formatHexString(convertBinaryToHex(binaryValue));
-    }
-    return formatBinaryString(binaryValue, dataType);
-  }, [binaryInputMode, binaryValue, dataType]);
+  const binaryDisplayValue = useMemo(() => formatBinaryString(binaryValue, dataType), [binaryValue, dataType]);
+  const hexDisplayValue = useMemo(() => formatHexString(convertBinaryToHex(binaryValue)), [binaryValue]);
 
   return (
     <div className="min-h-screen bg-brand-dark text-gray-200 flex flex-col items-center justify-center p-4 font-sans">
-      <main className="w-full max-w-4xl mx-auto bg-brand-light-dark rounded-xl shadow-2xl p-6 md:p-10 space-y-8">
+      <main className="w-full max-w-5xl mx-auto bg-brand-light-dark rounded-xl shadow-2xl p-6 md:p-10 space-y-8">
         <header className="text-center">
           <h1 className="text-4xl md:text-5xl font-bold text-white">Binary-Decimal Converter</h1>
           <p className="text-gray-400 mt-2 text-lg">Real-time conversion for various data types</p>
@@ -258,37 +208,29 @@ const App: React.FC = () => {
             type="text"
             error={lastChanged === 'decimal' ? error : null}
           />
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-                <h2 className="text-lg font-semibold text-gray-300">
-                    {binaryInputMode === 'binary' ? 'Binary' : 'Hexadecimal'}
-                </h2>
-                <div className="flex space-x-1 bg-brand-dark p-1 rounded-md">
-                    <button
-                        onClick={() => handleModeChange('binary')}
-                        className={`px-3 py-1 text-sm rounded-md transition-colors ${binaryInputMode === 'binary' ? 'bg-brand-blue text-white' : 'text-gray-400 hover:bg-brand-gray'}`}
-                        aria-pressed={binaryInputMode === 'binary'}
-                    >
-                        Bin
-                    </button>
-                    <button
-                        onClick={() => handleModeChange('hex')}
-                        className={`px-3 py-1 text-sm rounded-md transition-colors ${binaryInputMode === 'hex' ? 'bg-brand-blue text-white' : 'text-gray-400 hover:bg-brand-gray'}`}
-                        aria-pressed={binaryInputMode === 'hex'}
-                    >
-                        Hex
-                    </button>
-                </div>
-            </div>
+          
+          <div className="space-y-6">
+             <ConverterInput 
+                id="hex-input"
+                label="Hexadecimal"
+                value={hexDisplayValue}
+                onChange={handleHexChange}
+                placeholder={`e.g., ${convertBinaryToHex(DATA_TYPE_DETAILS[dataType].example.replace(/\s/g,''))}`}
+                type="text"
+                error={lastChanged === 'hex' ? error : null}
+                isBinary={true}
+                rows={1}
+            />
             <ConverterInput 
-                id="binary-hex-input"
-                label=""
-                value={binaryHexDisplayValue}
-                onChange={handleBinaryHexChange}
-                placeholder={binaryInputMode === 'hex' ? `e.g., ${convertBinaryToHex(DATA_TYPE_DETAILS[dataType].example.replace(/\s/g,'').substring(0,8))}...` : `e.g., ${DATA_TYPE_DETAILS[dataType].example}`}
+                id="binary-input"
+                label="Binary"
+                value={binaryDisplayValue}
+                onChange={handleBinaryChange}
+                placeholder={`e.g., ${DATA_TYPE_DETAILS[dataType].example}`}
                 type="text"
                 error={lastChanged === 'binary' ? error : null}
                 isBinary={true}
+                rows={4}
             />
           </div>
         </div>
@@ -300,14 +242,6 @@ const App: React.FC = () => {
             aria-label="Clear inputs"
           >
             Clear
-          </button>
-          <button
-            onClick={handleExportPython}
-            disabled={true}
-            className="bg-brand-blue hover:opacity-90 text-white font-bold py-2 px-8 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-brand-light-dark focus:ring-brand-blue disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="Export as Python App"
-          >
-            Export Py
           </button>
         </div>
 
